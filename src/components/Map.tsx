@@ -27,6 +27,7 @@ interface MapProps {
   onMapDoubleClick: (lat: number, lng: number) => void;
   selectedRecord: PostalCodeItem | null;
   routePath: [number, number][];
+  onSelectRecord: (item: PostalCodeItem) => void;
 }
 
 export default function Map({
@@ -41,7 +42,8 @@ export default function Map({
   onMarkerDragEnd,
   onMapDoubleClick,
   selectedRecord,
-  routePath
+  routePath,
+  onSelectRecord
 }: MapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -56,12 +58,14 @@ export default function Map({
   const onMarkerDragRef = useRef(onMarkerDrag);
   const onMarkerDragEndRef = useRef(onMarkerDragEnd);
   const onMapDoubleClickRef = useRef(onMapDoubleClick);
+  const onSelectRecordRef = useRef(onSelectRecord);
 
   // Keep callback references fresh on each render
   useEffect(() => {
     onMarkerDragRef.current = onMarkerDrag;
     onMarkerDragEndRef.current = onMarkerDragEnd;
     onMapDoubleClickRef.current = onMapDoubleClick;
+    onSelectRecordRef.current = onSelectRecord;
   });
 
   // Initialize Map
@@ -203,6 +207,12 @@ export default function Map({
           weight: 1.5
         });
 
+        marker.on('click', () => {
+          if (onSelectRecordRef.current) {
+            onSelectRecordRef.current(item);
+          }
+        });
+
         // Store reference
         const key = `${item.latitude}-${item.longitude}`;
         markersMapRef.current[key] = marker;
@@ -245,6 +255,12 @@ export default function Map({
           fillOpacity: 0.4,
           opacity: 0.7,
           weight: 1
+        });
+
+        marker.on('click', () => {
+          if (onSelectRecordRef.current) {
+            onSelectRecordRef.current(item);
+          }
         });
 
         const gmapsLink = `https://www.google.com/maps/dir/?api=1&origin=${storeLat},${storeLng}&destination=${item.latitude},${item.longitude}`;

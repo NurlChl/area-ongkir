@@ -50,6 +50,13 @@ interface Stats {
   regenciesCount: number;
 }
 
+interface RouteOption {
+  distance: number;
+  duration: number;
+  coordinates: [number, number][];
+  summary: string;
+}
+
 // Import Map component dynamically to prevent SSR errors
 const Map = dynamic(() => import('@/components/Map'), { ssr: false });
 
@@ -83,6 +90,9 @@ export default function Home() {
   const [selectedRecord, setSelectedRecord] = useState<PostalCodeItem | null>(null);
   const [routePath, setRoutePath] = useState<[number, number][]>([]);
   const [roadDistance, setRoadDistance] = useState<string | null>(null);
+  const [routeOptions, setRouteOptions] = useState<RouteOption[]>([]);
+  const [activeRouteIndex, setActiveRouteIndex] = useState<number>(0);
+  const [defaultRoutePreference, setDefaultRoutePreference] = useState<'shortest' | 'middle' | 'longest'>('shortest');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [theme, setTheme] = useState<string>('dark');
   const [distanceMethod, setDistanceMethod] = useState<'geodesic' | 'road'>('road');
@@ -154,6 +164,8 @@ export default function Home() {
     setSelectedRecord(null);
     setRoutePath([]);
     setRoadDistance(null);
+    setRouteOptions([]);
+    setActiveRouteIndex(0);
   };
 
   // OSRM Routing handler
@@ -161,24 +173,46 @@ export default function Home() {
     setSelectedRecord(item);
     setRoadDistance('Menghitung...');
     try {
-      const url = `https://router.project-osrm.org/route/v1/driving/${storeLng},${storeLat};${item.longitude},${item.latitude}?overview=full&geometries=geojson`;
+      const url = `https://router.project-osrm.org/route/v1/driving/${storeLng},${storeLat};${item.longitude},${item.latitude}?overview=full&geometries=geojson&alternatives=true`;
       const res = await fetch(url);
       const data = await res.json();
       if (data.routes && data.routes.length > 0) {
-        const route = data.routes[0];
-        setRoadDistance((route.distance / 1000).toFixed(2));
-        
-        // Convert OSRM points [lng, lat] to Leaflet points [lat, lng]
-        const coords: [number, number][] = route.geometry.coordinates.map((pt: [number, number]) => [pt[1], pt[0]]);
-        setRoutePath(coords);
+        const parsedRoutes = data.routes.map((r: any) => {
+          const distanceKm = parseFloat((r.distance / 1000).toFixed(2));
+          const durationMin = parseFloat((r.duration / 60).toFixed(1));
+          const coords: [number, number][] = r.geometry.coordinates.map((pt: [number, number]) => [pt[1], pt[0]]);
+          const summary = r.legs?.[0]?.summary || 'Jalan Raya';
+          return {
+            distance: distanceKm,
+            duration: durationMin,
+            coordinates: coords,
+            summary
+          };
+        }).sort((a: any, b: any) => a.distance - b.distance);
+
+        let targetIdx = 0;
+        if (defaultRoutePreference === 'longest') {
+          targetIdx = parsedRoutes.length - 1;
+        } else if (defaultRoutePreference === 'middle') {
+          targetIdx = Math.floor(parsedRoutes.length / 2);
+        }
+
+        setRouteOptions(parsedRoutes);
+        setActiveRouteIndex(targetIdx);
+        setRoadDistance(parsedRoutes[targetIdx].distance.toFixed(2));
+        setRoutePath(parsedRoutes[targetIdx].coordinates);
       } else {
         setRoadDistance('Gagal mendapatkan rute');
         setRoutePath([]);
+        setRouteOptions([]);
+        setActiveRouteIndex(0);
       }
     } catch (err) {
       console.error('Error fetching OSRM route:', err);
       setRoadDistance('Error rute');
       setRoutePath([]);
+      setRouteOptions([]);
+      setActiveRouteIndex(0);
     }
   };
 
@@ -308,6 +342,75 @@ export default function Home() {
   // Helper render for Sidebar content so it can be shared between desktop sidebar and mobile dropdown
   const renderSidebarControls = () => (
     <div className="flex flex-col gap-6">
+      {/* Active Route Details (if any selected) */}
+      {selectedRecord && (
+        <div className="flex flex-col gap-3 rounded-lg border border-primary/20 p-4 bg-primary/5 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+              <Navigation size={13} className="animate-pulse" /> Rute Aktif
+            </label>
+            <button 
+              onClick={() => {
+                setSelectedRecord(null);
+                setRoutePath([]);
+                setRoadDistance(null);
+                setRouteOptions([]);
+                setActiveRouteIndex(0);
+              }}
+              className="text-muted-foreground hover:text-destructive p-0.5 rounded transition-colors"
+              title="Bersihkan Rute"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm font-bold text-foreground truncate">{selectedRecord.village} ({selectedRecord.postalCode})</span>
+            <span className="text-[10px] text-muted-foreground truncate">Kec. {selectedRecord.district}, {selectedRecord.regency}</span>
+          </div>
+          
+          <div className="flex items-center justify-between border-t border-border/40 pt-2">
+            <span className="text-xs text-muted-foreground">Jarak Rute:</span>
+            <span className="text-sm font-extrabold text-primary">{roadDistance ? `${roadDistance} km` : 'Menghitung...'}</span>
+          </div>
+
+          {/* Alternative selections inside sidebar */}
+          {routeOptions.length > 1 && (
+            <div className="flex flex-col gap-1.5 border-t border-border/40 pt-2">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Opsi Alternatif Rute:</span>
+              <div className="flex flex-col gap-1.5">
+                {routeOptions.map((opt, idx) => {
+                  let label = `Alternatif ${idx + 1}`;
+                  if (idx === 0) label = "Terdekat";
+                  else if (idx === routeOptions.length - 1) label = "Terjauh";
+                  else label = "Tengah/Alternatif";
+                  
+                  const isRouteActive = idx === activeRouteIndex;
+
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setActiveRouteIndex(idx);
+                        setRoadDistance(opt.distance.toFixed(2));
+                        setRoutePath(opt.coordinates);
+                      }}
+                      className={`flex items-center justify-between px-2.5 py-1.5 rounded text-[11px] font-semibold transition-all border ${
+                        isRouteActive
+                          ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                          : 'bg-background hover:bg-accent border-input text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <span className="truncate mr-2">{label}</span>
+                      <span className="font-mono text-[10px] shrink-0">{opt.distance} km</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Location Configuration */}
       <div className="flex flex-col gap-3">
         <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
@@ -377,6 +480,22 @@ export default function Home() {
             ? 'Jarak jalan darat aktual menggunakan OSRM API (optimal untuk pengiriman kurir).' 
             : 'Jarak udara garis lurus kompas langsung (lebih cepat, estimasi kasar).'}
         </p>
+        
+        {/* Default Route Option Preference */}
+        {distanceMethod === 'road' && (
+          <div className="flex flex-col gap-1.5 border-t border-border/40 pt-3">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Prioritas Rute Default</span>
+            <select 
+              value={defaultRoutePreference}
+              onChange={(e) => setDefaultRoutePreference(e.target.value as any)}
+              className="h-8 rounded-md border border-input bg-transparent px-2.5 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer font-semibold"
+            >
+              <option value="shortest">Rute Terdekat</option>
+              <option value="middle">Rute Tengah / Alternatif</option>
+              <option value="longest">Rute Terjauh</option>
+            </select>
+          </div>
+        )}
       </div>
       
       {/* Radius Configuration */}
@@ -577,18 +696,68 @@ export default function Home() {
           
           {/* OSRM Route Info Panel (Appears when route is active) */}
           {selectedRecord && (
-            <div className="flex items-center justify-between gap-4 border border-border rounded-lg p-3 bg-muted/40 shadow-[0_1px_2px_rgba(0,0,0,0.02)] animate-in fade-in slide-in-from-top-1 duration-200">
-              <div className="flex flex-col">
-                <h4 className="text-xs font-bold text-foreground">Rute Terpilih: {selectedRecord.village} ({selectedRecord.postalCode})</h4>
-                <p className="text-[11px] text-muted-foreground">Kec. {selectedRecord.district}, {selectedRecord.regency}</p>
+            <div className="flex flex-col gap-3 border border-border rounded-lg p-4 bg-muted/40 shadow-[0_1px_2px_rgba(0,0,0,0.02)] animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col">
+                  <h4 className="text-xs font-bold text-foreground">Rute Terpilih: {selectedRecord.village} ({selectedRecord.postalCode})</h4>
+                  <p className="text-[11px] text-muted-foreground">Kec. {selectedRecord.district}, {selectedRecord.regency}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-col items-end shrink-0">
+                    <span className="text-[10px] text-muted-foreground">Jarak Rute Darat:</span>
+                    <strong className="text-sm font-bold text-emerald-500">{roadDistance ? `${roadDistance} km` : 'Menghitung...'}</strong>
+                    <span className="text-[9px] text-muted-foreground">
+                      {distanceMethod === 'road' ? `(Jarak Database: ${selectedRecord.distance} km)` : `(Jarak Udara: ${selectedRecord.distance} km)`}
+                    </span>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setSelectedRecord(null);
+                      setRoutePath([]);
+                      setRoadDistance(null);
+                      setRouteOptions([]);
+                      setActiveRouteIndex(0);
+                    }}
+                    className="text-muted-foreground hover:text-foreground p-1 hover:bg-accent rounded transition-colors"
+                    title="Hapus Rute"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
               </div>
-              <div className="flex flex-col items-end shrink-0">
-                <span className="text-[10px] text-muted-foreground">Jarak Rute Darat (OSRM):</span>
-                <strong className="text-sm font-bold text-emerald-500">{roadDistance ? `${roadDistance} km` : 'Menghitung...'}</strong>
-                <span className="text-[9px] text-muted-foreground">
-                  {distanceMethod === 'road' ? `(Jarak Jalan: ${selectedRecord.distance} km)` : `(Jarak Udara: ${selectedRecord.distance} km)`}
-                </span>
-              </div>
+
+              {/* Alternative Route Choices */}
+              {routeOptions.length > 1 && (
+                <div className="flex flex-col gap-1.5 border-t border-border/60 pt-2.5">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pilihan Rute Alternatif (OSRM):</span>
+                  <div className="flex flex-wrap gap-2">
+                    {routeOptions.map((opt, idx) => {
+                      let label = `Alternatif ${idx + 1}`;
+                      if (idx === 0) label = "Terdekat";
+                      else if (idx === routeOptions.length - 1) label = "Terjauh";
+                      else label = "Tengah/Alternatif";
+
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            setActiveRouteIndex(idx);
+                            setRoadDistance(opt.distance.toFixed(2));
+                            setRoutePath(opt.coordinates);
+                          }}
+                          className={`inline-flex items-center justify-center rounded px-2.5 py-1 text-xs font-semibold transition-all ${
+                            idx === activeRouteIndex
+                              ? 'bg-primary text-primary-foreground shadow-sm'
+                              : 'bg-background hover:bg-accent border border-input text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {label} ({opt.distance} km - {opt.summary})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -612,6 +781,7 @@ export default function Home() {
               }}
               selectedRecord={selectedRecord}
               routePath={routePath}
+              onSelectRecord={handleFetchRoute}
             />
           </div>
         </section>
