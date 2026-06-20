@@ -84,14 +84,9 @@ export default function Map({
       doubleClickZoom: false
     });
 
-    const tileUrl = theme === 'light'
-      ? "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-      : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
-
-    const tileLayer = L.tileLayer(tileUrl, {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd',
-      maxZoom: 20
+    const tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19
     }).addTo(map);
 
     tileLayerRef.current = tileLayer;
@@ -189,13 +184,7 @@ export default function Map({
     }
   }, [storeLat, storeLng, radiusKm]);
 
-  // Update Tile Layer Theme dynamically
-  useEffect(() => {
-    if (!tileLayerRef.current) return;
-    const lightUrl = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
-    const darkUrl = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
-    tileLayerRef.current.setUrl(theme === 'light' ? lightUrl : darkUrl);
-  }, [theme]);
+
 
   // Render Inside Markers
   useEffect(() => {

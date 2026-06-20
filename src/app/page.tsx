@@ -23,7 +23,9 @@ import {
   FileSpreadsheet,
   FileText,
   Sun,
-  Moon
+  Moon,
+  SlidersHorizontal,
+  X
 } from 'lucide-react';
 
 interface PostalCodeItem {
@@ -84,6 +86,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [theme, setTheme] = useState<string>('dark');
   const [distanceMethod, setDistanceMethod] = useState<'geodesic' | 'road'>('road');
+  const [showMobileControls, setShowMobileControls] = useState<boolean>(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'dark';
@@ -302,214 +305,294 @@ export default function Home() {
     XLSX.writeFile(wb, `Jangkauan_NextJS_Radius_${radiusKm}km.xlsx`);
   };
 
+  // Helper render for Sidebar content so it can be shared between desktop sidebar and mobile dropdown
+  const renderSidebarControls = () => (
+    <div className="flex flex-col gap-6">
+      {/* Location Configuration */}
+      <div className="flex flex-col gap-3">
+        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+          <Navigation size={14} className="text-foreground" /> Koordinat Toko Pusat
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-medium text-muted-foreground uppercase">Latitude</span>
+            <input 
+              type="number" 
+              step="any" 
+              value={storeLat} 
+              onChange={(e) => setStoreLat(parseFloat(e.target.value) || 0)}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-medium text-muted-foreground uppercase">Longitude</span>
+            <input 
+              type="number" 
+              step="any" 
+              value={storeLng}
+              onChange={(e) => setStoreLng(parseFloat(e.target.value) || 0)}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+          </div>
+        </div>
+        <button 
+          onClick={handleReset} 
+          className="inline-flex items-center justify-center rounded-md text-xs font-medium transition-colors border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-3 gap-2 mt-1"
+        >
+          <RotateCcw size={12} /> Reset ke Toko Pusat
+        </button>
+      </div>
+
+      {/* Distance Calculation Method */}
+      <div className="flex flex-col gap-3">
+        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+          <Compass size={14} className="text-foreground" /> Metode Hitung Jarak
+        </label>
+        <div className="grid grid-cols-2 gap-2 bg-muted p-1 rounded-lg">
+          <button 
+            type="button"
+            onClick={() => setDistanceMethod('road')} 
+            className={`inline-flex items-center justify-center rounded-md text-xs font-semibold py-1.5 transition-all ${
+              distanceMethod === 'road' 
+                ? 'bg-card text-foreground shadow-sm' 
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Jarak Jalan (Pas)
+          </button>
+          <button 
+            type="button"
+            onClick={() => setDistanceMethod('geodesic')} 
+            className={`inline-flex items-center justify-center rounded-md text-xs font-semibold py-1.5 transition-all ${
+              distanceMethod === 'geodesic' 
+                ? 'bg-card text-foreground shadow-sm' 
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Jarak Udara (Lurus)
+          </button>
+        </div>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          {distanceMethod === 'road' 
+            ? 'Jarak jalan darat aktual menggunakan OSRM API (optimal untuk pengiriman kurir).' 
+            : 'Jarak udara garis lurus kompas langsung (lebih cepat, estimasi kasar).'}
+        </p>
+      </div>
+      
+      {/* Radius Configuration */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <Compass size={14} className="text-foreground" /> Radius Maksimal
+          </label>
+          <span className="text-xs font-bold bg-accent text-accent-foreground px-2 py-0.5 rounded border border-border">{radiusKm} km</span>
+        </div>
+        <input 
+          type="range" 
+          min="1" 
+          max="50" 
+          value={radiusKm} 
+          onChange={(e) => setRadiusKm(parseInt(e.target.value))}
+          className="w-full h-1.5 bg-secondary rounded-lg appearance-none cursor-pointer accent-foreground"
+        />
+        <p className="text-[11px] text-muted-foreground">Rentang jangkauan: 1 km s.d 50 km</p>
+      </div>
+
+      {/* Map Visual Toggle */}
+      <div className="flex flex-col gap-3">
+        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+          <MapIcon size={14} className="text-foreground" /> Filter Visual Peta
+        </label>
+        <label className="inline-flex items-center gap-2.5 cursor-pointer text-sm text-foreground select-none">
+          <input 
+            type="checkbox" 
+            checked={showOutsideMarkers}
+            onChange={(e) => setShowOutsideMarkers(e.target.checked)}
+            className="rounded border-input text-primary focus:ring-ring h-4 w-4 bg-transparent cursor-pointer"
+          />
+          <span>Tampilkan Area Sebagian (Luar Radius)</span>
+        </label>
+      </div>
+      
+      {/* Real-time Search */}
+      <div className="flex flex-col gap-3">
+        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+          <Search size={14} className="text-foreground" /> Pencarian Real-time
+        </label>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <input 
+            type="text" 
+            placeholder="Cari Kode Pos, Desa, Kecamatan..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="flex h-9 w-full rounded-md border border-input bg-transparent pl-9 pr-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        </div>
+      </div>
+      
+      {/* Live Statistics */}
+      <div className="flex flex-col gap-3 rounded-lg border border-border p-4 bg-muted/30">
+        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+          <BarChart3 size={14} className="text-foreground" /> Ringkasan Area Tercover
+        </label>
+        <div className="grid grid-cols-2 gap-2 mt-1">
+          <div className="flex flex-col border border-border p-2.5 rounded-md bg-card shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+            <span className="text-lg font-bold tracking-tight">{stats.villagesCount.toLocaleString('id-ID')}</span>
+            <span className="text-[9px] text-muted-foreground uppercase font-semibold">Kelurahan/Desa</span>
+          </div>
+          <div className="flex flex-col border border-border p-2.5 rounded-md bg-card shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+            <span className="text-lg font-bold tracking-tight">{stats.postcodesCount.toLocaleString('id-ID')}</span>
+            <span className="text-[9px] text-muted-foreground uppercase font-semibold">Kode Pos</span>
+          </div>
+          <div className="flex flex-col border border-border p-2.5 rounded-md bg-card shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+            <span className="text-lg font-bold tracking-tight">{stats.districtsCount.toLocaleString('id-ID')}</span>
+            <span className="text-[9px] text-muted-foreground uppercase font-semibold">Kecamatan</span>
+          </div>
+          <div className="flex flex-col border border-border p-2.5 rounded-md bg-card shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+            <span className="text-lg font-bold tracking-tight">{stats.regenciesCount.toLocaleString('id-ID')}</span>
+            <span className="text-[9px] text-muted-foreground uppercase font-semibold">Kabupaten/Kota</span>
+          </div>
+        </div>
+      </div>
+      
+      {/* Export Panel */}
+      <div className="flex flex-col gap-2 pt-4 border-t border-border">
+        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2 mb-1">
+          <Download size={14} className="text-foreground" /> Ekspor Jangkauan
+        </label>
+        <button 
+          onClick={handleExportExcel} 
+          className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 px-4 gap-2 w-full"
+        >
+          <FileSpreadsheet size={15} /> Ekspor ke Excel (.xlsx)
+        </button>
+        <button 
+          onClick={handleExportCSV} 
+          className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-4 gap-2 w-full"
+        >
+          <FileText size={15} /> Ekspor ke CSV (.csv)
+        </button>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="app-container">
-      {/* Sidebar Controls */}
-      <aside className="sidebar">
-        <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div className="logo-container">
-            <i className="logo-icon"><MapPin size={32} /></i>
+    <div className="flex flex-col lg:grid lg:grid-cols-[380px_1fr] min-h-screen bg-background text-foreground antialiased selection:bg-primary selection:text-primary-foreground">
+      {/* Sidebar Controls - Desktop view only */}
+      <aside className="hidden lg:flex flex-col h-screen border-r border-border bg-card shrink-0 sticky top-0 overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <div className="flex items-center gap-3">
+            <div className="bg-primary text-primary-foreground p-1.5 rounded-md">
+              <MapPin size={20} />
+            </div>
             <div>
-              <h1>Area Ongkir</h1>
-              <span className="subtitle">Next.js + JSON Local</span>
+              <h1 className="font-bold tracking-tight text-base leading-none">Area Ongkir</h1>
+              <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Next.js + JSON Local</span>
             </div>
           </div>
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="btn-secondary"
-            style={{ padding: '8px', borderRadius: '50%', width: '36px', height: '36px', flexShrink: 0 }}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-8 w-8"
             title={theme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
           >
-            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
           </button>
         </div>
         
-        <div className="sidebar-content">
-
-          {/* Location Configuration */}
-          <div className="control-group">
-            <label className="group-title"><Navigation size={16} /> Koordinat Toko Pusat</label>
-            <div className="input-grid">
-              <div className="input-field">
-                <label htmlFor="input-lat">Latitude</label>
-                <input 
-                  type="number" 
-                  id="input-lat" 
-                  step="any" 
-                  value={storeLat} 
-                  onChange={(e) => setStoreLat(parseFloat(e.target.value) || 0)}
-                />
-              </div>
-              <div className="input-field">
-                <label htmlFor="input-lng">Longitude</label>
-                <input 
-                  type="number" 
-                  id="input-lng" 
-                  step="any" 
-                  value={storeLng}
-                  onChange={(e) => setStoreLng(parseFloat(e.target.value) || 0)}
-                />
-              </div>
-            </div>
-            <div className="button-row" style={{ marginTop: '8px' }}>
-              <button onClick={handleReset} className="btn-secondary" style={{ width: '100%' }}><RotateCcw size={14} /> Reset ke Topsell</button>
-            </div>
-          </div>
-
-          {/* Distance Calculation Method */}
-          <div className="control-group">
-            <label className="group-title"><Navigation size={16} /> Metode Hitung Jarak</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
-              <button 
-                type="button"
-                onClick={() => setDistanceMethod('road')} 
-                className={distanceMethod === 'road' ? 'btn-primary' : 'btn-secondary'}
-                style={{ fontSize: '11px', padding: '8px 4px', fontWeight: 700 }}
-              >
-                Jarak Jalan (Pas)
-              </button>
-              <button 
-                type="button"
-                onClick={() => setDistanceMethod('geodesic')} 
-                className={distanceMethod === 'geodesic' ? 'btn-primary' : 'btn-secondary'}
-                style={{ fontSize: '11px', padding: '8px 4px', fontWeight: 700 }}
-              >
-                Jarak Udara (Lurus)
-              </button>
-            </div>
-            <span className="slider-helper">
-              {distanceMethod === 'road' 
-                ? 'Mengikuti jarak jalan darat nyata untuk pengiriman kurir.' 
-                : 'Mengikuti jarak garis lurus kompas (geodesic).'}
-            </span>
-          </div>
-          
-          {/* Radius Configuration */}
-          <div className="control-group">
-            <div className="slider-header">
-              <label className="group-title"><Compass size={16} /> Radius Maksimal</label>
-              <span id="radius-val" className="slider-value">{radiusKm} km</span>
-            </div>
-            <input 
-              type="range" 
-              id="input-radius" 
-              min="1" 
-              max="50" 
-              value={radiusKm} 
-              onChange={(e) => setRadiusKm(parseInt(e.target.value))}
-              className="slider"
-            />
-            <span className="slider-helper">Bisa digeser dari 1 km hingga 50 km</span>
-          </div>
-
-          {/* Map Visual Toggle */}
-          <div className="control-group">
-            <label className="group-title"><MapIcon size={16} /> Filter Visual Peta</label>
-            <label className="checkbox-label">
-              <input 
-                type="checkbox" 
-                id="toggle-outside-markers" 
-                checked={showOutsideMarkers}
-                onChange={(e) => setShowOutsideMarkers(e.target.checked)}
-              />
-              <span>Tampilkan Area Sebagian (Luar Radius)</span>
-            </label>
-          </div>
-          
-          {/* Real-time Search */}
-          <div className="control-group">
-            <label className="group-title" htmlFor="input-search"><Search size={16} /> Pencarian Real-time</label>
-            <div className="search-box">
-              <Search className="search-icon" size={16} />
-              <input 
-                type="text" 
-                id="input-search" 
-                placeholder="Cari Kode Pos, Desa, Kecamatan..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-          </div>
-          
-          {/* Live Statistics */}
-          <div className="control-group stats-card">
-            <label className="group-title"><BarChart3 size={16} /> Ringkasan Area</label>
-            <div className="stats-grid">
-              <div className="stat-item">
-                <span className="stat-val">{stats.villagesCount.toLocaleString('id-ID')}</span>
-                <span className="stat-lbl">Kelurahan/Desa</span>
-              </div>
-              <div className="stat-item">
-                <span className="stat-val">{stats.postcodesCount.toLocaleString('id-ID')}</span>
-                <span className="stat-lbl">Kode Pos Unik</span>
-              </div>
-              <div className="stat-item">
-                <span className="stat-val">{stats.districtsCount.toLocaleString('id-ID')}</span>
-                <span className="stat-lbl">Kecamatan</span>
-              </div>
-              <div className="stat-item">
-                <span className="stat-val">{stats.regenciesCount.toLocaleString('id-ID')}</span>
-                <span className="stat-lbl">Kabupaten/Kota</span>
-              </div>
-            </div>
-          </div>
-          
-          {/* Export Panel */}
-          <div className="control-group export-group">
-            <label className="group-title"><Download size={16} /> Ekspor Jangkauan</label>
-            <button onClick={handleExportExcel} className="btn-primary btn-excel"><FileSpreadsheet size={14} /> Ekspor ke Excel (.xlsx)</button>
-            <button onClick={handleExportCSV} className="btn-secondary"><FileText size={14} /> Ekspor ke CSV (.csv)</button>
-          </div>
+        <div className="p-6 grow">
+          {renderSidebarControls()}
         </div>
         
-        <div className="sidebar-footer">
-          <p>Next.js + JSON Local Engine</p>
-          <p className="copyright">&copy; Topsell Dev &bull; Antigravity AI</p>
+        <div className="p-4 border-t border-border bg-muted/10 text-center text-[10px] text-muted-foreground flex flex-col gap-0.5">
+          <p className="font-medium">Next.js Local Engine &bull; Mojokerto</p>
+          <p>&copy; Topsell Dev &bull; Antigravity AI</p>
         </div>
       </aside>
+
+      {/* Mobile Top Navbar */}
+      <header className="flex lg:hidden items-center justify-between p-4 border-b border-border bg-card sticky top-0 z-50 shadow-sm">
+        <div className="flex items-center gap-2">
+          <div className="bg-primary text-primary-foreground p-1.5 rounded-md">
+            <MapPin size={16} />
+          </div>
+          <div>
+            <h1 className="font-bold tracking-tight text-sm">Area Ongkir</h1>
+            <span className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider block">Mojokerto 20km</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowMobileControls(!showMobileControls)}
+            className="inline-flex items-center justify-center rounded-md text-xs font-semibold border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-8 px-3 gap-1.5"
+          >
+            <SlidersHorizontal size={13} /> {showMobileControls ? 'Tutup' : 'Kontrol'}
+          </button>
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-8 w-8"
+          >
+            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
+        </div>
+      </header>
+
+      {/* Mobile Collapsible Control Panel Drawer */}
+      {showMobileControls && (
+        <div className="lg:hidden bg-card border-b border-border p-4 flex flex-col gap-4 shadow-md max-h-[80vh] overflow-y-auto z-40 sticky top-[57px]">
+          <div className="flex items-center justify-between border-b border-border pb-2 mb-1">
+            <h3 className="font-bold text-sm flex items-center gap-1.5"><SlidersHorizontal size={14} /> Kontrol & Penyaringan</h3>
+            <button 
+              onClick={() => setShowMobileControls(false)}
+              className="text-muted-foreground hover:text-foreground p-1"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          {renderSidebarControls()}
+        </div>
+      )}
       
       {/* Main Content Area */}
-      <main className="main-content">
+      <main className="grow p-4 md:p-8 flex flex-col gap-6 overflow-x-hidden">
+        
         {/* Map Section */}
-        <section className="map-section">
-          <div className="card-header">
-            <div className="title-with-badge">
-              <h2><MapIcon size={18} /> Peta Wilayah Jangkauan</h2>
-              <span className="badge">{distanceMethod === 'road' ? 'Radius Jarak Darat' : 'Radius Jarak Udara'}</span>
+        <section className="flex flex-col gap-4 rounded-xl border border-border p-4 md:p-6 bg-card shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border pb-4">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <h2 className="font-bold text-lg tracking-tight flex items-center gap-2">
+                  <MapIcon size={18} className="text-muted-foreground" /> Peta Wilayah Jangkauan
+                </h2>
+                <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-500 border border-emerald-500/20">
+                  {distanceMethod === 'road' ? 'Jarak Darat (OSRM)' : 'Jarak Udara (Geodesic)'}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                <AlertCircle size={13} className="text-amber-500 shrink-0" />
+                <span>Geser penanda <span className="font-semibold text-destructive">Merah</span> untuk memindahkan pusat toko.</span>
+              </p>
             </div>
-            <span className="info-text">
-              <AlertCircle className="inline-icon" size={14} /> Geser penanda <span className="accent-text">Merah</span> di peta untuk mengubah lokasi toko. {distanceMethod === 'road' ? <>Penyaringan area saat ini menggunakan <b>Jarak Jalan Raya (OSRM)</b> nyata.</> : <>Jarak dihitung adalah <b>Jarak Udara (Garis Lurus)</b>. Rute jalan raya akan lebih jauh.</>}
-            </span>
           </div>
           
-          {/* OSRM Route Info Panel */}
+          {/* OSRM Route Info Panel (Appears when route is active) */}
           {selectedRecord && (
-            <div style={{
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border-color)',
-              borderRadius: 'var(--border-radius-md)',
-              padding: '12px 16px',
-              marginBottom: '12px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              boxShadow: 'var(--shadow-sm)'
-            }}>
-              <div>
-                <h4 style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)' }}>Rute Terpilih: {selectedRecord.village} ({selectedRecord.postalCode})</h4>
-                <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Kec. {selectedRecord.district}, {selectedRecord.regency}</p>
+            <div className="flex items-center justify-between gap-4 border border-border rounded-lg p-3 bg-muted/40 shadow-[0_1px_2px_rgba(0,0,0,0.02)] animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="flex flex-col">
+                <h4 className="text-xs font-bold text-foreground">Rute Terpilih: {selectedRecord.village} ({selectedRecord.postalCode})</h4>
+                <p className="text-[11px] text-muted-foreground">Kec. {selectedRecord.district}, {selectedRecord.regency}</p>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>Jarak Rute Darat (OSRM API):</span>
-                <strong style={{ fontSize: '16px', color: 'var(--accent-cyan)' }}>{roadDistance ? `${roadDistance} km` : 'Menghitung...'}</strong>
-                <span style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block' }}>
+              <div className="flex flex-col items-end shrink-0">
+                <span className="text-[10px] text-muted-foreground">Jarak Rute Darat (OSRM):</span>
+                <strong className="text-sm font-bold text-emerald-500">{roadDistance ? `${roadDistance} km` : 'Menghitung...'}</strong>
+                <span className="text-[9px] text-muted-foreground">
                   {distanceMethod === 'road' ? `(Jarak Jalan: ${selectedRecord.distance} km)` : `(Jarak Udara: ${selectedRecord.distance} km)`}
                 </span>
               </div>
             </div>
           )}
 
-          <div style={{ height: '360px', width: '100%', position: 'relative' }}>
+          <div className="h-[340px] md:h-[400px] w-full rounded-lg overflow-hidden border border-border shadow-sm bg-muted/20 relative z-10">
             <Map 
               theme={theme}
               storeLat={storeLat}
@@ -534,63 +617,92 @@ export default function Home() {
         </section>
         
         {/* Table Section */}
-        <section className="table-section">
-          <div className="table-header">
-            <div className="table-title">
-              <h2><List size={18} /> Daftar Kode Pos Terfilter</h2>
-              <span className="row-count">Menampilkan {sortedRecords.length.toLocaleString('id-ID')} data</span>
+        <section className="flex flex-col gap-4 rounded-xl border border-border p-4 md:p-6 bg-card shadow-sm grow">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
+            <div className="flex items-center gap-2.5">
+              <h2 className="font-bold text-lg tracking-tight flex items-center gap-2">
+                <List size={18} className="text-muted-foreground" /> Daftar Area Terfilter
+              </h2>
+              <span className="inline-flex items-center rounded-full bg-accent text-accent-foreground px-2 py-0.5 text-xs font-semibold border border-border">
+                {sortedRecords.length.toLocaleString('id-ID')} data
+              </span>
             </div>
-            <div className="table-actions">
-              <div className="select-field">
-                <label htmlFor="select-limit">Tampilkan</label>
-                <select 
-                  id="select-limit"
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(e.target.value === 'all' ? -1 : parseInt(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                >
-                  <option value="10">10 baris</option>
-                  <option value="25">25 baris</option>
-                  <option value="50">50 baris</option>
-                  <option value="100">100 baris</option>
-                  <option value="all">Semua data</option>
-                </select>
-              </div>
+            
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs text-muted-foreground">Tampilkan</span>
+              <select 
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(e.target.value === 'all' ? -1 : parseInt(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="h-8 rounded-md border border-input bg-transparent px-2.5 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer font-medium"
+              >
+                <option value="10">10 baris</option>
+                <option value="25">25 baris</option>
+                <option value="50">50 baris</option>
+                <option value="100">100 baris</option>
+                <option value="all">Semua data</option>
+              </select>
             </div>
           </div>
           
-          <div className="table-responsive">
-            <table id="data-table">
+          <div className="w-full overflow-x-auto rounded-lg border border-border shadow-sm bg-background">
+            <table className="w-full border-collapse text-left text-sm">
               <thead>
-                <tr>
-                  <th style={{ width: '60px' }}>No</th>
-                  <th style={{ width: '120px' }} className="sortable" onClick={() => handleSort('postalCode')}>
-                    Kode Pos <i className="sort-icon"><ChevronsUpDown size={12} /></i>
+                <tr className="border-b border-border bg-muted/40 transition-colors">
+                  <th className="h-10 px-4 align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[60px]">No</th>
+                  <th 
+                    className="h-10 px-4 align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[120px] cursor-pointer select-none hover:text-foreground transition-colors"
+                    onClick={() => handleSort('postalCode')}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Kode Pos <ChevronsUpDown size={11} className="text-muted-foreground/60" />
+                    </div>
                   </th>
-                  <th className="sortable" onClick={() => handleSort('village')}>
-                    Kelurahan / Desa <i className="sort-icon"><ChevronsUpDown size={12} /></i>
+                  <th 
+                    className="h-10 px-4 align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"
+                    onClick={() => handleSort('village')}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Kelurahan / Desa <ChevronsUpDown size={11} className="text-muted-foreground/60" />
+                    </div>
                   </th>
-                  <th className="sortable" onClick={() => handleSort('district')}>
-                    Kecamatan <i className="sort-icon"><ChevronsUpDown size={12} /></i>
+                  <th 
+                    className="h-10 px-4 align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"
+                    onClick={() => handleSort('district')}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Kecamatan <ChevronsUpDown size={11} className="text-muted-foreground/60" />
+                    </div>
                   </th>
-                  <th className="sortable" onClick={() => handleSort('regency')}>
-                    Kabupaten / Kota <i className="sort-icon"><ChevronsUpDown size={12} /></i>
+                  <th 
+                    className="h-10 px-4 align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors"
+                    onClick={() => handleSort('regency')}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Kabupaten / Kota <ChevronsUpDown size={11} className="text-muted-foreground/60" />
+                    </div>
                   </th>
-                  <th style={{ width: '130px' }} className="sortable active-sort" onClick={() => handleSort('distance')}>
-                    {distanceMethod === 'road' ? 'Jarak Rute' : 'Jarak Udara'} <i className="sort-icon">
+                  <th 
+                    className="h-10 px-4 align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[130px] cursor-pointer select-none hover:text-foreground transition-colors"
+                    onClick={() => handleSort('distance')}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      {distanceMethod === 'road' ? 'Jarak Rute' : 'Jarak Udara'}{' '}
                       {currentSortField === 'distance' ? (
-                        currentSortOrder === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
-                      ) : <ChevronsUpDown size={12} />}
-                    </i>
+                        currentSortOrder === 'asc' ? <ChevronUp size={11} className="text-foreground" /> : <ChevronDown size={11} className="text-foreground" />
+                      ) : (
+                        <ChevronsUpDown size={11} className="text-muted-foreground/60" />
+                      )}
+                    </div>
                   </th>
-                  <th style={{ width: '150px' }}>Status Cakupan</th>
-                  <th style={{ width: '180px' }}>Koordinat</th>
-                  <th style={{ width: '150px', textAlign: 'center' }}>Google Map</th>
+                  <th className="h-10 px-4 align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[150px]">Status</th>
+                  <th className="h-10 px-4 align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[180px]">Koordinat</th>
+                  <th className="h-10 px-4 align-middle text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[140px] text-center">Google Maps</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-border">
                 {paginatedRecords.map((item, index) => {
                   const rowNum = pageSize === -1 ? index + 1 : (currentPage - 1) * pageSize + index + 1;
                   const gmapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${storeLat},${storeLng}&destination=${item.latitude},${item.longitude}`;
@@ -599,36 +711,41 @@ export default function Home() {
                   return (
                     <tr 
                       key={`${item.postalCode}-${item.village}`}
-                      className={isActive ? 'active-row' : ''}
                       onClick={() => handleFetchRoute(item)}
+                      className={`hover:bg-muted/50 cursor-pointer transition-colors ${
+                        isActive ? 'bg-accent/80 font-medium border-l-2 border-l-primary' : ''
+                      }`}
                     >
-                      <td>{rowNum}</td>
-                      <td><span className="postal-badge">{item.postalCode}</span></td>
-                      <td className="bold-text">{item.village}</td>
-                      <td>{item.district}</td>
-                      <td>{item.regency}</td>
-                      <td className="dist-col">{item.distance} km</td>
-                      <td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">{rowNum}</td>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs border border-border px-1.5 py-0.5 rounded bg-muted/30 text-foreground font-semibold">
+                          {item.postalCode}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-foreground">{item.village}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{item.district}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{item.regency}</td>
+                      <td className="px-4 py-3 font-bold text-primary">{item.distance} km</td>
+                      <td className="px-4 py-3">
                         {item.isPartial ? (
-                          <span className="badge-partial" title="Sebagian desa di wilayah ini berada di luar radius.">
-                            <AlertTriangle size={12} /> Sebagian
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full" title="Sebagian desa di wilayah ini berada di luar radius.">
+                            <AlertTriangle size={10} /> Sebagian
                           </span>
                         ) : (
-                          <span className="badge-full" title="Seluruh desa di wilayah ini berada di dalam radius.">
-                            <CheckCircle size={12} /> Penuh
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full" title="Seluruh desa di wilayah ini berada di dalam radius.">
+                            <CheckCircle size={10} /> Penuh
                           </span>
                         )}
                       </td>
-                      <td className="coord-col">{item.latitude.toFixed(5)}, {item.longitude.toFixed(5)}</td>
-                      <td style={{ textAlign: 'center' }}>
+                      <td className="px-4 py-3 text-muted-foreground font-mono text-[11px]">{item.latitude.toFixed(5)}, {item.longitude.toFixed(5)}</td>
+                      <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                         <a 
                           href={gmapsUrl} 
                           target="_blank" 
                           rel="noopener noreferrer" 
-                          className="btn-gmaps"
-                          onClick={(e) => e.stopPropagation()} // Prevent row click select when clicking link
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold border border-input rounded-md px-2.5 py-1 bg-background shadow-sm hover:bg-accent hover:text-accent-foreground transition-colors"
                         >
-                          <ExternalLink size={12} /> Rute Maps
+                          <ExternalLink size={10} /> Rute
                         </a>
                       </td>
                     </tr>
@@ -638,36 +755,38 @@ export default function Home() {
             </table>
             
             {filteredRecords.length === 0 && !isLoading && (
-              <div id="no-data-msg" className="no-data-message">
-                <AlertCircle className="no-data-icon" size={48} />
-                <h3>Data tidak ditemukan</h3>
-                <p>Tidak ada kode pos atau kelurahan dalam radius tersebut yang cocok dengan kata kunci pencarian Anda.</p>
+              <div className="flex flex-col items-center justify-center p-12 text-center">
+                <AlertCircle className="h-10 w-10 text-muted-foreground/60 mb-3" />
+                <h3 className="font-bold text-sm text-foreground">Data tidak ditemukan</h3>
+                <p className="text-xs text-muted-foreground max-w-sm mt-1">Tidak ada kode pos atau kelurahan dalam radius tersebut yang cocok dengan kata kunci pencarian Anda.</p>
               </div>
             )}
 
             {isLoading && (
-              <div className="no-data-message">
-                <h3>Memuat data...</h3>
+              <div className="flex flex-col items-center justify-center p-12 text-center">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mb-3"></div>
+                <h3 className="font-medium text-sm text-foreground">Memuat data...</h3>
               </div>
             )}
           </div>
           
           {/* Table Pagination */}
           {pageSize !== -1 && sortedRecords.length > 0 && (
-            <div className="pagination-container">
-              <span className="pagination-info">
-                Menampilkan {Math.min((currentPage - 1) * pageSize + 1, sortedRecords.length)}-
-                {Math.min(currentPage * pageSize, sortedRecords.length)} dari {sortedRecords.length} data
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-2">
+              <span className="text-xs text-muted-foreground text-center sm:text-left">
+                Menampilkan <b>{Math.min((currentPage - 1) * pageSize + 1, sortedRecords.length)}</b> -{' '}
+                <b>{Math.min(currentPage * pageSize, sortedRecords.length)}</b> dari <b>{sortedRecords.length}</b> data
               </span>
-              <div className="pagination-buttons">
+              <div className="flex items-center justify-center gap-1.5">
                 <button 
                   onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
-                  className="btn-pagination"
+                  className="inline-flex items-center justify-center rounded-md text-xs font-medium border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-8 px-3 gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
                   disabled={currentPage === 1}
                 >
-                  <ChevronLeft size={14} /> Sebelumnya
+                  <ChevronLeft size={13} /> Sblm
                 </button>
-                <div className="page-numbers">
+                
+                <div className="flex items-center gap-1">
                   {(() => {
                     const pages = [];
                     const maxPagesToShow = 5;
@@ -686,19 +805,24 @@ export default function Home() {
                       <button
                         key={pageNum}
                         onClick={() => setCurrentPage(pageNum)}
-                        className={`page-num ${pageNum === currentPage ? 'active' : ''}`}
+                        className={`inline-flex items-center justify-center rounded-md text-xs font-semibold h-8 w-8 transition-colors ${
+                          pageNum === currentPage 
+                            ? 'bg-primary text-primary-foreground shadow' 
+                            : 'border border-input bg-background hover:bg-accent hover:text-accent-foreground'
+                        }`}
                       >
                         {pageNum}
                       </button>
                     ));
                   })()}
                 </div>
+                
                 <button 
                   onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
-                  className="btn-pagination"
+                  className="inline-flex items-center justify-center rounded-md text-xs font-medium border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-8 px-3 gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
                   disabled={currentPage === totalPages}
                 >
-                  Selanjutnya <ChevronRight size={14} />
+                  Sldt <ChevronRight size={13} />
                 </button>
               </div>
             </div>
