@@ -592,6 +592,13 @@ export default function Home() {
         >
           <FileText size={15} /> Ekspor ke CSV (.csv)
         </button>
+        <a href="https://choliltopsell.github.io/generator">
+          <button 
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-4 gap-2 w-full"
+          >
+            Kembali ke Generator
+          </button>
+        </a>
       </div>
     </div>
   );
